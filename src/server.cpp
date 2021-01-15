@@ -13,6 +13,7 @@ enum CMD
 	CMD_LOGIN_RESULT,
 	CMD_LOGOUT,
 	CMD_LOGOUT_RESULT,
+	CMD_NEW_USER_JOIN,
 	CMD_ERROR
 };
 
@@ -60,10 +61,21 @@ struct LogoutResult : public DataHeader
 	LogoutResult()
 	{
 		dataLength = sizeof(LogoutResult);
-		cmd = CMD_LOGIN_RESULT;
+		cmd = CMD_LOGOUT_RESULT;
 		result = 0;
 	}
 	int result;
+};
+
+struct NewUserJoin : public DataHeader
+{
+	NewUserJoin()
+	{
+		dataLength = sizeof(NewUserJoin);
+		cmd = CMD_NEW_USER_JOIN;
+		scok = 0;
+	}
+	int scok;
 };
 
 std::vector<SOCKET> g_clients;
@@ -77,7 +89,7 @@ int processor(SOCKET _cSock)
 	DataHeader* header = (DataHeader*)szRecv;
 	if (nLen <= 0)
 	{
-		printf("客户端已退出，任务结束。\n");
+		printf("客户端<Socket=%d>已退出，任务结束。\n", _cSock);
 		return -1;
 	}
 	switch (header->cmd)
@@ -86,7 +98,7 @@ int processor(SOCKET _cSock)
 	{
 		recv(_cSock, szRecv + sizeof(DataHeader), header->dataLength - sizeof(DataHeader), 0);
 		Login* login = (Login*)szRecv;
-		printf("收到命令：CMD_LOGIN,数据长度：%d,userName=%s PassWord=%s\n", login->dataLength, login->userName, login->PassWord);
+		printf("收到客户端<Socket=%d>请求：CMD_LOGIN,数据长度：%d,userName=%s PassWord=%s\n", _cSock, login->dataLength, login->userName, login->PassWord);
 		//忽略判断用户密码是否正确的过程
 		LoginResult ret;
 		send(_cSock, (char*)&ret, sizeof(LoginResult), 0);
@@ -96,7 +108,7 @@ int processor(SOCKET _cSock)
 	{
 		recv(_cSock, szRecv + sizeof(DataHeader), header->dataLength - sizeof(DataHeader), 0);
 		Logout* logout = (Logout*)szRecv;
-		printf("收到命令：CMD_LOGOUT,数据长度：%d,userName=%s \n", logout->dataLength, logout->userName);
+		printf("收到客户端<Socket=%d>请求：CMD_LOGOUT,数据长度：%d,userName=%s \n", _cSock, logout->dataLength, logout->userName);
 		//忽略判断用户密码是否正确的过程
 		LogoutResult ret;
 		send(_cSock, (char*)&ret, sizeof(ret), 0);
@@ -145,15 +157,15 @@ int main()
 
 	while (true)
 	{
-		//伯克利 socket
-		fd_set fdRead;
+		//伯克利套接字 BSD socket
+		fd_set fdRead;//描述符（socket） 集合  
 		fd_set fdWrite;
 		fd_set fdExp;
-
+		//清理集合
 		FD_ZERO(&fdRead);
 		FD_ZERO(&fdWrite);
 		FD_ZERO(&fdExp);
-
+		//将描述符（socket）加入集合  
 		FD_SET(_sock, &fdRead);
 		FD_SET(_sock, &fdWrite);
 		FD_SET(_sock, &fdExp);
@@ -171,6 +183,7 @@ int main()
 			printf("select任务结束。\n");
 			break;
 		}
+		//判断描述符（socket）是否在集合中  
 		if (FD_ISSET(_sock, &fdRead))
 		{
 			FD_CLR(_sock, &fdRead);
@@ -183,8 +196,16 @@ int main()
 			{
 				printf("错误,接受到无效客户端SOCKET...\n");
 			}
-			g_clients.push_back(_cSock);
-			printf("新客户端加入：socket = %d,IP = %s \n", (int)_cSock, inet_ntoa(clientAddr.sin_addr));
+			else
+			{
+				for (int n = (int)g_clients.size() - 1; n >= 0; n--)
+				{
+					NewUserJoin userJoin;
+					send(g_clients[n], (const char*)&userJoin, sizeof(NewUserJoin), 0);
+				}
+				g_clients.push_back(_cSock);
+				printf("新客户端加入：socket = %d,IP = %s \n", (int)_cSock, inet_ntoa(clientAddr.sin_addr));
+			}
 		}
 		for (size_t n = 0; n < fdRead.fd_count; n++)
 		{
@@ -197,9 +218,11 @@ int main()
 				}
 			}
 		}
+
+		printf("空闲时间处理其它业务..\n");
 	}
 
-	for (int n = g_clients.size() - 1; n >= 0; n--)
+	for (size_t n = g_clients.size() - 1; n >= 0; n--)
 	{
 		closesocket(g_clients[n]);
 	}
