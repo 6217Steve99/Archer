@@ -7,6 +7,8 @@
 
 #include <vector>
 
+#pragma comment(lib,"ws2_32.lib")
+
 enum CMD
 {
 	CMD_LOGIN,
@@ -176,7 +178,7 @@ int main()
 		}
 		///nfds 是一个整数值 是指fd_set集合中所有描述符(socket)的范围，而不是数量
 		///既是所有文件描述符最大值+1 在Windows中这个参数可以写0
-		timeval t = { 0,0 };
+		timeval t = { 1,0 };
 		int ret = select(_sock + 1, &fdRead, &fdWrite, &fdExp, &t);
 		if (ret < 0)
 		{
@@ -219,7 +221,7 @@ int main()
 			}
 		}
 
-		printf("空闲时间处理其它业务..\n");
+		//printf("空闲时间处理其它业务..\n");
 	}
 
 	for (size_t n = g_clients.size() - 1; n >= 0; n--)
