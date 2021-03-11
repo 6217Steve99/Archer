@@ -8,6 +8,8 @@ project (SimpleClient)
 # Create a sources variable with a link to all cpp files to compile
 set(SOURCES
     client.cpp
+	EasyTcpClient.hpp
+	MessageHeader.hpp
 )
 
 # Add an executable with the above sources
