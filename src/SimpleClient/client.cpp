@@ -1,11 +1,20 @@
+#ifdef _WIN32
 #define WIN32_LEAN_AND_MEAN
-
 #include<windows.h>
 #include<WinSock2.h>
+#pragma comment(lib,"ws2_32.lib")
+#else
+#include<unistd.h> //uni std
+#include<arpa/inet.h>
+#include<string.h>
+
+#define SOCKET int
+#define INVALID_SOCKET  (SOCKET)(~0)
+#define SOCKET_ERROR            (-1)
+#endif
+
 #include<stdio.h>
 #include<thread>
-
-#pragma comment(lib,"ws2_32.lib")
 
 enum CMD
 {
@@ -83,11 +92,11 @@ int processor(SOCKET _cSock)
 	//缓冲区
 	char szRecv[4096] = {};
 	// 5 接收客户端数据
-	int nLen = recv(_cSock, szRecv, sizeof(DataHeader), 0);
+	int nLen = (int)recv(_cSock, szRecv, sizeof(DataHeader), 0);
 	DataHeader* header = (DataHeader*)szRecv;
 	if (nLen <= 0)
 	{
-		printf("与服务器断开连接，任务结束。\n", _cSock);
+		printf("与服务器断开连接，任务结束。\n");
 		return -1;
 	}
 	switch (header->cmd)
@@ -110,10 +119,11 @@ int processor(SOCKET _cSock)
 	{
 		recv(_cSock, szRecv + sizeof(DataHeader), header->dataLength - sizeof(DataHeader), 0);
 		NewUserJoin* userJoin = (NewUserJoin*)szRecv;
-		printf("收到服务端消息：CMD_NEW_USER_JOIN,数据长度：%d\n", _cSock, userJoin->dataLength);
+		printf("收到服务端消息：CMD_NEW_USER_JOIN,数据长度：%d\n", userJoin->dataLength);
 	}
 	break;
 	}
+	return 0;
 }
 bool g_bRun = true;
 void cmdThread(SOCKET sock)
@@ -149,10 +159,12 @@ void cmdThread(SOCKET sock)
 
 int main()
 {
+#ifdef _WIN32
 	//启动Windows socket 2.x环境
 	WORD ver = MAKEWORD(2, 2);
 	WSADATA dat;
 	WSAStartup(ver, &dat);
+#endif
 	//------------
 	//-- 用Socket API建立简易TCP客户端
 	// 1 建立一个socket
@@ -168,7 +180,11 @@ int main()
 	sockaddr_in _sin = {};
 	_sin.sin_family = AF_INET;
 	_sin.sin_port = htons(4567);
+#ifdef _WIN32
 	_sin.sin_addr.S_un.S_addr = inet_addr("127.0.0.1");
+#else
+	_sin.sin_addr.s_addr = inet_addr("192.168.74.1");
+#endif
 	int ret = connect(_sock, (sockaddr*)&_sin, sizeof(sockaddr_in));
 	if (SOCKET_ERROR == ret)
 	{
@@ -187,7 +203,7 @@ int main()
 		FD_ZERO(&fdReads);
 		FD_SET(_sock, &fdReads);
 		timeval t = { 1,0 };
-		int ret = select(_sock, &fdReads, 0, 0, &t);
+		int ret = select(_sock + 1, &fdReads, 0, 0, &t);
 		if (ret < 0)
 		{
 			printf("select任务结束1\n");
@@ -209,9 +225,13 @@ int main()
 		//Sleep(1000);
 	}
 	// 7 关闭套节字closesocket
+#ifdef _WIN32
 	closesocket(_sock);
 	//清除Windows socket环境
 	WSACleanup();
+#else
+	close(_sock);
+#endif
 	printf("已退出。\n");
 	getchar();
 	return 0;
